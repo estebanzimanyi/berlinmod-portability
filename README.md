@@ -80,3 +80,39 @@ For timing runs, scale the dataset by the number of trips and keep the
 QueryLicences / QueryPoints / QueryRegions / QueryPeriods subsets at the
 BerlinMOD 10-item convention so the per-query cost stays comparable across
 engines.
+
+## th3index prefilter (REQUIRED — the canonical suite uses th3index)
+
+Every spatial-against-static query (q02, q04, q11–q17) carries an H3 cell-set
+prefilter ANDed with its pure-spatiotemporal-rel exact predicate. The prefilter
+is a **pure cell-membership test** — both sides are precomputed H3 columns, so
+the query contains no `geoToH3IndexSet` and no `transform`:
+
+    everEq(<static>.geom_h3, <trip>.trip_h3)
+      AND <exact eIntersects/eContains/valueAtTimestamp predicate>
+
+How the H3 columns are produced (once, in the generator
+`berlinmod_portability_export`, then read verbatim from the CSV by every loader):
+
+  - Read each geometry at its native lon/lat (4326) source.
+  - Compute the H3 cell index from that 4326 value — `trip_h3 = th3index(trip,7)`
+    for trips, `geom_h3 = geoToH3IndexSet(geom,7)` for QueryPoints/QueryRegions —
+    so the cells are exact (H3 is defined on 4326; no project-and-reproject-back
+    round-trip that could flip a boundary cell).
+  - *Then* reproject the stored geometry to the chosen output SRID.
+
+So `trip_h3` / `geom_h3` are H3-native (4326) regardless of the geometry output
+SRID, and the prefilter `everEq(geom_h3, trip_h3)` needs no reprojection at query
+time on any platform — zero `geoToH3IndexSet`/`transform` in the hot path.
+
+The generator itself is portable: it serialises and reprojects with MobilityDB's
+own `transform()` / `asEWKT()` (MEOS-backed, present on PostgreSQL, DuckDB and
+Spark) instead of PostGIS-only `ST_Transform` / `ST_AsEWKT` that DuckDB Spatial
+lacks — so the suite and its generation carry no platform-spatial dependency: no
+PostGIS, duckdb_spatial or Sedona function appears. (Base-geometry
+`transform(geometry, integer)` / `asEWKT(geometry)`: MobilityDB/MobilityDB#1201.)
+
+The cell-set ever-equal predicate is MobilityDB's `ever_eq(h3indexset, th3index)`
+/ `?=` operator, rendered as the canonical `everEq(...)` the queries call. The
+native bbox prefilter (`overlaps(trip, stbox(geom, t))`) and the th3 prefilter
+coexist so the benchmark's tier framework can toggle either index.

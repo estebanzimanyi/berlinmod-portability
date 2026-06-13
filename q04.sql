@@ -15,5 +15,6 @@
 SELECT DISTINCT v.licence
 FROM   Vehicles v
 JOIN   Trips t      ON t.vehId  = v.vehId
-JOIN   QueryPoints p ON eIntersects(t.trip, p.geom)
+JOIN   QueryPoints p ON everEq(p.geom_h3, t.trip_h3)
+                    AND eIntersects(t.trip, p.geom)
 ORDER  BY v.licence;

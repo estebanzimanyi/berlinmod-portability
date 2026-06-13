@@ -2,49 +2,54 @@
 -- This file is part of MobilityDB documentation.
 -- Licensed under Creative Commons Attribution 4.0 International (CC BY 4.0).
 --
--- BerlinMOD schema — portable across MobilityDB/PostgreSQL, MobilityDuck/DuckDB,
--- and MobilitySpark/Spark SQL.
+-- BerlinMOD schema — ONE file run identically by MobilityDB/PostgreSQL,
+-- MobilityDuck/DuckDB and MobilitySpark/Spark SQL.
 --
--- Type names (tgeompoint, tstzspan, …) are registered identically on all three platforms.
--- The geometry type uses the platform's native geometry type (PostGIS / DuckDB Spatial /
--- Spark JTS — all store EWKB-compatible hex strings in the portable interchange format).
+-- These are the INPUT tables the raw CSVs load into (no H3 columns). load.sql then
+-- builds the indexed Trips / QueryPoints / QueryRegions from them via CREATE TABLE
+-- AS SELECT, and the queries read those.
+--
+-- Column TYPES: tgeompoint, tstzspan, geometry, … are the MobilityDB types,
+-- registered identically on MobilityDB/PostgreSQL and MobilityDuck/DuckDB. On
+-- MobilitySpark/Spark the same columns are STRING (EWKB-/WKT-compatible hex/text)
+-- operated on by UDFs of the same names — until Spark exposes the types as UDTs.
+-- load.sql and every query are byte-identical across the three regardless.
 
 CREATE TABLE IF NOT EXISTS Vehicles (
-    vehId   integer  PRIMARY KEY,
-    licence text     NOT NULL,
-    type    text     NOT NULL,
-    model   text     NOT NULL
-);
-
-CREATE TABLE IF NOT EXISTS Trips (
-    tripId  integer     PRIMARY KEY,
-    vehId   integer     NOT NULL REFERENCES Vehicles(vehId),
-    trip    tgeompoint  NOT NULL
+    vehId   integer,
+    licence text,
+    type    text,
+    model   text
 );
 
 CREATE TABLE IF NOT EXISTS QueryLicences (
-    licenceId integer PRIMARY KEY,
-    licence   text    NOT NULL,
+    licenceId integer,
+    licence   text,
     vehId     integer
 );
 
 CREATE TABLE IF NOT EXISTS QueryInstants (
-    instantId integer     PRIMARY KEY,
-    instant   timestamptz NOT NULL
-);
-
-CREATE TABLE IF NOT EXISTS QueryPoints (
-    pointId integer  PRIMARY KEY,
-    geom    geometry NOT NULL,
-    geomWKT text     NOT NULL DEFAULT ''
-);
-
-CREATE TABLE IF NOT EXISTS QueryRegions (
-    regionId integer  PRIMARY KEY,
-    geom     geometry NOT NULL
+    instantId integer,
+    instant   timestamptz
 );
 
 CREATE TABLE IF NOT EXISTS QueryPeriods (
-    periodId integer   PRIMARY KEY,
-    period   tstzspan  NOT NULL
+    periodId integer,
+    period   tstzspan
+);
+
+CREATE TABLE IF NOT EXISTS TripsInput (
+    tripId integer,
+    vehId  integer,
+    trip   tgeompoint        -- raw lat/lon (EPSG:4326) trajectory; H3 built at load
+);
+
+CREATE TABLE IF NOT EXISTS QueryPointsInput (
+    pointId integer,
+    geom    geometry         -- raw lat/lon (EPSG:4326) point
+);
+
+CREATE TABLE IF NOT EXISTS QueryRegionsInput (
+    regionId integer,
+    geom     geometry        -- raw lat/lon (EPSG:4326) region
 );
