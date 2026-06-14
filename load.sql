@@ -32,7 +32,8 @@ CREATE TABLE Trips AS
 
 CREATE TABLE QueryPoints AS
   SELECT pointId, geom,
-         geoToH3IndexSet(geom, 7) AS geom_h3
+         geoToH3IndexSet(geom, 7) AS geom_h3,
+         asEWKT(geom) AS geomWKT
   FROM   QueryPointsInput;
 
 CREATE TABLE QueryRegions AS
