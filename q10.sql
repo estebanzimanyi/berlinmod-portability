@@ -9,21 +9,39 @@
 -- and MobilitySpark/Spark SQL.
 --
 -- Temporal operations used:
---   expandSpace(tgeompoint, float) → stbox      (expand bounding box spatially)
---   tDwithin(tgeompoint, tgeompoint, float) → tbool
---   whenTrue(tbool) → tstzspanset               (intervals when predicate holds)
+--   tDwithinPairs(tgeompoint[], tgeompoint[], float) → setof (i, j, periods)
+--     The NxN-array form of tDwithin + whenTrue.  Given two arrays of trips it
+--     returns, for every pair that ever came within the distance, the 1-based
+--     index pair (i, j) and the tstzspanset of periods during which they did —
+--     computing the STBox prefilter, the temporal distance, and the period
+--     extraction once in C over the whole cross product instead of one
+--     expandSpace/tDwithin/whenTrue per candidate pair.  Only pairs with a
+--     non-empty period set are emitted, so the former "periods IS NOT NULL"
+--     filter is implicit.
+--
+-- Side 1 is the trips of the QueryLicences vehicles, side 2 is all trips; the
+-- result indices i, j are 1-based into the two parallel arrays.  vehIds1[i] <>
+-- vehIds2[j] reproduces the former t1.vehId <> t2.vehId.
 
-WITH Temp AS (
-  SELECT l.licence AS licence1, t2.vehId AS car2Id,
-         whenTrue(tDwithin(t1.trip, t2.trip, 3.0)) AS periods,
-         t1.tripId AS tripId1, t2.tripId AS tripId2
+WITH Sel AS (        -- trips of the QueryLicences vehicles (side 1)
+  SELECT array_agg(t.trip    ORDER BY t.tripId) AS trips,
+         array_agg(l.licence ORDER BY t.tripId) AS licences,
+         array_agg(v.vehId   ORDER BY t.tripId) AS vehIds,
+         array_agg(t.tripId  ORDER BY t.tripId) AS tripIds
   FROM   QueryLicences l
-  JOIN   Vehicles v1 ON v1.licence = l.licence
-  JOIN   Trips    t1 ON t1.vehId   = v1.vehId
-  JOIN   Trips    t2 ON t1.vehId  <> t2.vehId
-  WHERE  overlaps(t2.trip, expandSpace(t1.trip, 3))
+  JOIN   Vehicles v ON v.licence = l.licence
+  JOIN   Trips    t ON t.vehId   = v.vehId
+),
+AllTrips AS (        -- every trip (side 2)
+  SELECT array_agg(t.trip   ORDER BY t.tripId) AS trips,
+         array_agg(t.vehId  ORDER BY t.tripId) AS vehIds,
+         array_agg(t.tripId ORDER BY t.tripId) AS tripIds
+  FROM   Trips t
 )
-SELECT licence1, car2Id, periods
-FROM   Temp
-WHERE  periods IS NOT NULL
-ORDER  BY licence1, car2Id, tripId1, tripId2;
+SELECT s.licences[p.i] AS licence1,
+       a.vehIds[p.j]   AS car2Id,
+       p.periods       AS periods
+FROM   Sel s, AllTrips a,
+       tDwithinPairs(s.trips, a.trips, 3.0) AS p(i, j, periods)
+WHERE  s.vehIds[p.i] <> a.vehIds[p.j]
+ORDER  BY licence1, car2Id, s.tripIds[p.i], a.tripIds[p.j];
