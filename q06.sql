@@ -8,27 +8,30 @@
 -- and MobilitySpark/Spark SQL.
 --
 -- Temporal operations used:
---   eDwithin(tgeompoint, tgeompoint, float8) → boolean
---     True if the two trips ever came within the given distance of each other.
+--   eDwithinPairs(tgeompoint[], tgeompoint[], float8) → setof (i, j)
+--     The NxN-array form of eDwithin.  Given two arrays of trips it returns
+--     every 1-based index pair (i, j) whose trips ever came within the
+--     distance of each other, performing the STBox prefilter and the exact
+--     ever-distance test once in C over the whole cross product — instead of
+--     a SQL self-join that evaluates one expandSpace/eDwithin per candidate
+--     pair.  The pair set includes self pairs and both orders.
 --
--- MobilityDB operator equivalent: t1.trip |=| t2.trip <= 10.0
--- (|=| is nearest-approach-distance; eDwithin is the efficient index-friendly form)
---
--- Performance: if two trips ever come within 10 m at a common instant, t2's
--- position at that instant lies inside t1's spatiotemporal bounding box
--- expanded by 10 m, so overlaps(expandSpace(t1.trip, 10.0), t2.trip) is a
--- necessary condition for any result row and cannot drop a true row.  Placing
--- it first turns the full O(n^2) cross product into an index/broadcast-prunable
--- join on all three engines.
+-- The truck trips are collected once into parallel arrays of trip / licence /
+-- vehicle id.  eDwithinPairs returns index pairs into them; vehIds[i] <
+-- vehIds[j] keeps one row per unordered distinct-vehicle pair (the former
+-- v1.vehId < v2.vehId) and drops the self pairs.
 
-SELECT v1.licence AS licence1,
-       v2.licence AS licence2
-FROM   Vehicles v1
-JOIN   Trips t1 ON t1.vehId = v1.vehId
-JOIN   Vehicles v2 ON v1.vehId < v2.vehId
-JOIN   Trips t2 ON t2.vehId = v2.vehId
-WHERE  v1.type  = 'truck'
-  AND  v2.type  = 'truck'
-  AND  overlaps(expandSpace(t1.trip, 10.0), t2.trip)
-  AND  eDwithin(t1.trip, t2.trip, 10.0)
-ORDER  BY v1.licence, v2.licence;
+WITH Trucks AS (
+  SELECT array_agg(t.trip    ORDER BY t.tripId) AS trips,
+         array_agg(v.licence ORDER BY t.tripId) AS licences,
+         array_agg(v.vehId   ORDER BY t.tripId) AS vehIds
+  FROM   Vehicles v
+  JOIN   Trips t ON t.vehId = v.vehId
+  WHERE  v.type = 'truck'
+)
+SELECT k.licences[p.i] AS licence1,
+       k.licences[p.j] AS licence2
+FROM   Trucks k,
+       eDwithinPairs(k.trips, k.trips, 10.0) AS p(i, j)
+WHERE  k.vehIds[p.i] < k.vehIds[p.j]
+ORDER  BY licence1, licence2;
