@@ -2,38 +2,36 @@
 -- This file is part of MobilityDB documentation.
 -- Licensed under Creative Commons Attribution 4.0 International (CC BY 4.0).
 --
--- BerlinMOD Q5: For each pair of query-licence vehicles, the minimum distance
--- ever reached between their trips.
+-- BerlinMOD Q5: What is the minimum distance between places where a vehicle
+-- with a licence from QueryLicences and another such vehicle have been?
 --
--- Portable: works unchanged on MobilityDB/PostgreSQL, MobilityDuck/DuckDB,
--- and MobilitySpark/Spark SQL.
+-- This is the original BerlinMOD R-benchmark Q5: the minimum SPATIAL distance
+-- between the places the two vehicles visited -- regardless of WHEN. In the
+-- reference it is ST_Distance(ST_Collect(trajectory(trips1)),
+-- ST_Collect(trajectory(trips2))) per pair of licences. (The previous form used
+-- nearestApproachDistance, the time-synchronous nearest approach, a different
+-- metric that misses pairs whose paths cross at different times.)
+--
+-- Portable + index-less: minDistance(tgeompoint[], tgeompoint[]) computes
+-- exactly ST_Distance(ST_Collect(trajectory(arr1)), ST_Collect(trajectory(arr2)))
+-- but uses each input's STBox as a sound lower-bound prefilter and processes
+-- candidate pairs in ascending bbox-distance order with short-circuiting, so it
+-- needs no GiST/SP-GiST index and runs the same on every engine. Each licence's
+-- trips are collected into one array once, then compared pairwise.
 --
 -- Temporal operations used:
---   nearestApproachDistance(tgeompoint, tgeompoint) → float8
---     Returns the minimum Euclidean distance reached at any common instant.
---     Returns NULL when the trips have no overlapping time extent.
---
--- MobilityDB operator equivalent:  t1.trip |=| t2.trip
--- NOTE: MobilityPySpark called this min_distance() / nearest_approach_distance();
---       the canonical portable name is nearestApproachDistance() (MEOS convention).
---
--- Performance: nearestApproachDistance is non-NULL only when the two trips
--- share a time extent, so overlaps(timeSpan(t1.trip), timeSpan(t2.trip)) is a
--- necessary condition for any result row and cannot drop a true row.  Placing
--- it first lets every engine prune the pair space (PostgreSQL/DuckDB via a
--- span index, Spark via a broadcast join) instead of evaluating the expensive
--- NAD over the full O(n^2) cross product.
+--   minDistance(tgeompoint[], tgeompoint[]) → float8
 
-SELECT l1.licence AS licence1,
-       l2.licence AS licence2,
-       MIN(nearestApproachDistance(t1.trip, t2.trip)) AS min_dist
-FROM   QueryLicences l1
-JOIN   Vehicles v1  ON  v1.licence = l1.licence
-JOIN   Trips    t1  ON  t1.vehId   = v1.vehId
-JOIN   QueryLicences l2 ON l1.licenceId < l2.licenceId
-JOIN   Vehicles v2  ON  v2.licence = l2.licence
-JOIN   Trips    t2  ON  t2.vehId   = v2.vehId
-WHERE  overlaps(timeSpan(t1.trip), timeSpan(t2.trip))
-  AND  nearestApproachDistance(t1.trip, t2.trip) IS NOT NULL
-GROUP  BY l1.licence, l2.licence
-ORDER  BY l1.licence, l2.licence;
+WITH LicenceTrips AS (
+  SELECT l.licenceId, l.licence, array_agg(t.trip) AS trips
+  FROM   QueryLicences l
+  JOIN   Vehicles v ON v.licence = l.licence
+  JOIN   Trips    t ON t.vehId   = v.vehId
+  GROUP  BY l.licenceId, l.licence
+)
+SELECT a.licence AS licence1,
+       b.licence AS licence2,
+       minDistance(a.trips, b.trips) AS min_dist
+FROM   LicenceTrips a
+JOIN   LicenceTrips b ON a.licenceId < b.licenceId
+ORDER  BY licence1, licence2;
