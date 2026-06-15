@@ -16,7 +16,7 @@ WITH Temp AS (
   SELECT DISTINCT p.pointId, p.geom, p.geomWKT, i.instantId, i.instant, t.vehId
   FROM   Trips t, QueryPoints p, QueryInstants i
   WHERE  overlaps(t.trip, stbox(p.geom, i.instant))
-    AND  everEq(p.geom_h3, t.trip_h3)
+    AND  eEq(p.geom_h3, t.trip_h3)
     AND  valueAtTimestamp(t.trip, i.instant) = p.geom
 )
 SELECT DISTINCT t1.pointId, t1.geomWKT AS geom,

@@ -15,9 +15,9 @@
 -- and MobilitySpark/Spark SQL.
 --
 -- Temporal operations used:
---   everEq(h3indexset, th3index) → boolean        th3 cell-set prefilter.  A
+--   eEq(h3indexset, th3index) → boolean        th3 cell-set prefilter.  A
 --     point lies in exactly one H3 cell, so a trip can only pass through it
---     while it is in that cell; everEq(p.geom_h3, t.trip_h3) is therefore a
+--     while it is in that cell; eEq(p.geom_h3, t.trip_h3) is therefore a
 --     sound, index-less prefilter that prunes the cross product without a
 --     GiST/SP-GiST index (so it runs the same on every engine).
 --   atValues(tgeompoint, geometry) → tgeompoint   restrict the trip to the
@@ -29,7 +29,7 @@ WITH Temp AS (
          MIN(startTimestamp(atValues(t.trip, p.geom))) AS instant
   FROM   Trips t
   JOIN   Vehicles v   ON v.vehId = t.vehId
-  JOIN   QueryPoints p ON everEq(p.geom_h3, t.trip_h3)
+  JOIN   QueryPoints p ON eEq(p.geom_h3, t.trip_h3)
   WHERE  v.type = 'passenger'
     AND  atValues(t.trip, p.geom) IS NOT NULL
   GROUP  BY v.licence, p.pointId, p.geomWKT
