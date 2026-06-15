@@ -13,6 +13,6 @@
 SELECT DISTINCT v.licence
 FROM   Vehicles v
 JOIN   Trips t    ON  t.vehId = v.vehId
-JOIN   QueryRegions r ON everEq(r.geom_h3, t.trip_h3)
+JOIN   QueryRegions r ON eEq(r.geom_h3, t.trip_h3)
                     AND eIntersects(t.trip, r.geom)
 ORDER  BY v.licence;

@@ -22,7 +22,7 @@ WITH Temp AS (
   FROM   Trips t, QueryRegions r, QueryPeriods p
   WHERE  r.regionId <= 10 AND p.periodId <= 10
     AND  overlaps(t.trip, stbox(r.geom, p.period))
-    AND  everEq(r.geom_h3, t.trip_h3)
+    AND  eEq(r.geom_h3, t.trip_h3)
     AND  eIntersects(atTime(t.trip, p.period), r.geom)
 )
 SELECT DISTINCT t.regionId, t.periodId, t.period, v.licence

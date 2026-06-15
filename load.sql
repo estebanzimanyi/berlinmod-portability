@@ -22,7 +22,7 @@
 -- (EPSG:4326), which H3 requires, so the build never reprojects.
 --
 -- The th3 prefilter is then the pure cell-membership test
---   everEq(<static>.geom_h3, t.trip_h3)
+--   eEq(<static>.geom_h3, t.trip_h3)
 -- carried by q02/q04/q11–q17, with no per-query geoToH3IndexSet or transform.
 
 CREATE TABLE Trips AS

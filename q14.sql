@@ -20,7 +20,7 @@ WITH Temp AS (
   SELECT DISTINCT r.regionId, i.instantId, i.instant, t.vehId
   FROM   Trips t, QueryRegions r, QueryInstants i
   WHERE  overlaps(t.trip, stbox(r.geom, i.instant))
-    AND  everEq(r.geom_h3, t.trip_h3)
+    AND  eEq(r.geom_h3, t.trip_h3)
     AND  eContains(r.geom, atTime(t.trip, i.instant))
 )
 SELECT DISTINCT t.regionId, t.instantId, t.instant, v.licence
