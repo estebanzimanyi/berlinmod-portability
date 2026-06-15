@@ -36,6 +36,6 @@ WITH Temp AS (
 )
 SELECT t1.licence, t1.pointId, t1.geomWKT AS geom, t1.instant
 FROM   Temp t1
-WHERE  t1.instant <= ALL (
-         SELECT t2.instant FROM Temp t2 WHERE t1.pointId = t2.pointId)
+WHERE  t1.instant <= (
+         SELECT MIN(t2.instant) FROM Temp t2 WHERE t1.pointId = t2.pointId)
 ORDER  BY t1.pointId, t1.licence;
