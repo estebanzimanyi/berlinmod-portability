@@ -14,7 +14,7 @@
 WITH PointCount AS (
   SELECT p.pointId, COUNT(DISTINCT t.vehId) AS hits
   FROM   Trips t, QueryPoints p
-  WHERE  everEq(p.geom_h3, t.trip_h3)
+  WHERE  eEq(p.geom_h3, t.trip_h3)
     AND  eIntersects(t.trip, p.geom)
   GROUP  BY p.pointId
 )

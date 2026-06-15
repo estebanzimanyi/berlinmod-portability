@@ -34,9 +34,9 @@ WHERE  l1.licenceId <= 10 AND l2.licenceId <= 10
   AND  p.periodId   <= 10
   AND  r.regionId   <= 10
   AND  overlaps(t1.trip, stbox(r.geom, p.period))
-  AND  everEq(r.geom_h3, t1.trip_h3)
+  AND  eEq(r.geom_h3, t1.trip_h3)
   AND  overlaps(t2.trip, stbox(r.geom, p.period))
-  AND  everEq(r.geom_h3, t2.trip_h3)
+  AND  eEq(r.geom_h3, t2.trip_h3)
   AND  eIntersects(atTime(t1.trip, p.period), r.geom)
   AND  eIntersects(atTime(t2.trip, p.period), r.geom)
   AND  aDisjoint(atTime(t1.trip, p.period), atTime(t2.trip, p.period))
