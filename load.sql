@@ -39,3 +39,18 @@ CREATE TABLE QueryRegions AS
   SELECT regionId, geom,
          geoToH3IndexSet(geom, 7) AS geom_h3
   FROM   QueryRegionsInput;
+
+-- Exploded H3 cell tables: the same prefilter cells in (id, cell) form. The
+-- cell-set membership test on geom_h3/trip_h3 is an opaque boolean, so a join
+-- that uses it has no join key and degrades to a cross product (a sequential
+-- scan on engines without parameterized index nested-loop joins, e.g. DuckDB).
+-- Exploding the cell sets turns the prefilter into an equi-join on `cell`, which
+-- every engine executes as a hash join — the portable, index-less equivalent of
+-- a GiST index nested-loop join. Built once here, consumed by q13.
+CREATE TABLE TripCells AS
+  SELECT tripId, unnest(getValues(trip_h3)) AS cell
+  FROM   Trips;
+
+CREATE TABLE QueryRegionCells AS
+  SELECT regionId, unnest(geom_h3) AS cell
+  FROM   QueryRegions;

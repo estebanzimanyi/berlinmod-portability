@@ -16,13 +16,28 @@
 --   atTime(tgeompoint, tstzspan) → tgeompoint
 --   eIntersects(tgeompoint, geometry) → bool    (avoids trajectory() override)
 --   stbox(geometry, tstzspan) → stbox           (GiST index pre-filter constructor)
+--
+-- H3 prefilter: the cell-set membership test is expressed as an equi-join on the
+-- exploded TripCells / QueryRegionCells (cell) columns rather than the opaque
+-- everEq(geom_h3, trip_h3) boolean. An opaque boolean gives the planner no join
+-- key, so the trip×region prefilter degrades to a cross product — a sequential
+-- scan on engines without parameterized index nested-loop joins (e.g. DuckDB).
+-- The cell equi-join is executed as a hash join on every engine: the portable,
+-- index-less equivalent of a GiST index nested-loop join. It yields exactly the
+-- same candidate (trip, region) pairs as everEq; the exact eIntersects residual
+-- is unchanged.
 
-WITH Temp AS (
+WITH Candidates AS (
+  SELECT DISTINCT tc.tripId, rc.regionId
+  FROM   TripCells tc, QueryRegionCells rc
+  WHERE  tc.cell = rc.cell
+),
+Temp AS (
   SELECT DISTINCT r.regionId, p.periodId, p.period, t.vehId
-  FROM   Trips t, QueryRegions r, QueryPeriods p
-  WHERE  r.regionId <= 10 AND p.periodId <= 10
+  FROM   Trips t, QueryRegions r, QueryPeriods p, Candidates c
+  WHERE  c.tripId = t.tripId AND c.regionId = r.regionId
+    AND  r.regionId <= 10 AND p.periodId <= 10
     AND  overlaps(t.trip, stbox(r.geom, p.period))
-    AND  everEq(r.geom_h3, t.trip_h3)
     AND  eIntersects(atTime(t.trip, p.period), r.geom)
 )
 SELECT DISTINCT t.regionId, t.periodId, t.period, v.licence
